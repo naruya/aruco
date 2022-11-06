@@ -3,11 +3,13 @@ import cv2.aruco as aruco
 import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
+import imageio
 
 
 def calibrate(vid, aruco_dict, charuco):
     corners_all = []
     ids_all = []
+    frames = []
 
     for t, img in enumerate(vid):
         img = deepcopy(img)
@@ -34,6 +36,12 @@ def calibrate(vid, aruco_dict, charuco):
         corners_all.append(charuco_corners)
         ids_all.append(charuco_ids)
 
+        img = aruco.drawDetectedCornersCharuco(
+                image=img,
+                charucoCorners=charuco_corners,
+                charucoIds=charuco_ids)
+        frames.append(img)
+
     print("Number of detected frames:", len(corners_all))
 
     ret, cameraMatrix, distCoeffs, rvecs, tvecs = aruco.calibrateCameraCharuco(
@@ -45,6 +53,9 @@ def calibrate(vid, aruco_dict, charuco):
             distCoeffs=None)
 
     print('ret\n', ret, '\nmtx\n', cameraMatrix, '\ndist\n', distCoeffs)
+
+    # for debug
+    imageio.mimwrite("temp_calib{:04}.mp4".format(np.random.randint(1000)), frames, macro_block_size=8)
 
     return cameraMatrix, distCoeffs
 
