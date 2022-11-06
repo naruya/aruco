@@ -1,4 +1,4 @@
-# python get_intrinsics.py --vid charuco.mp4
+# python get_nerf_dataset.py --vid vid.mp4
 
 import argparse
 import cv2
@@ -15,7 +15,6 @@ from utils import undistort, estimate_pose
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vid", type=str, default="./")
-parser.add_argument("--out", type=str, default="./")
 parser.add_argument("--skip", type=int, default=6)
 parser.add_argument("--drop", type=int, default=30)
 parser.add_argument("--squares", type=int, nargs="+", default=[5,7])
@@ -54,12 +53,17 @@ indices, rvec_hist, tvec_hist = estimate_pose(
 vid_sample = list(np.array(vid)[indices])
 print(len(vid_sample), len(rvec_hist), len(tvec_hist))
 
-imageio.mimwrite("src/back_real.mp4", vid_sample, macro_block_size=8)
-
+if 'main' in os.path.basename(args.vid):
+    path = os.path.basename(args.vid).replace('main', 'main_real')
+    imageio.mimwrite(path, vid_sample, macro_block_size=8)
+    path = os.path.basename(args.vid).replace('main', 'poses').replace('mp4', 'pkl')
+    with open(path, 'wb') as f:
+        pickle.dump((indices, rvec_hist, tvec_hist), f)
 
 H, W = vid[0].shape[:2]
 
-os.makedirs('images/', exist_ok=True)
+if 'back' in os.path.basename(args.vid):
+    os.makedirs('charuco/images/', exist_ok=True)
 
 out = {
     "fl_x": float(mtx[0,0]),
@@ -91,7 +95,9 @@ print('pose max:', torch.max(torch.abs(poses[:, :3, 3])))
 frames = []
 for t, (img, c2w) in enumerate(zip(vid_sample, poses)):
     name = 'images/frame_{:05}.png'.format(t)
-    PIL.Image.fromarray(img).save(name, quality=95)  # heavy
+
+    if 'back' in os.path.basename(args.vid):
+        PIL.Image.fromarray(img).save('charuco/' + name, quality=95)  # heavy
 
     frame = {
         "file_path": name,
@@ -101,5 +107,10 @@ for t, (img, c2w) in enumerate(zip(vid_sample, poses)):
 
 out["frames"] = frames
 
-with open("transforms.json", "w", encoding="utf-8") as f:
+if 'main' in os.path.basename(args.vid):
+    path = os.path.basename(args.vid).replace('main', 'transforms').replace('mp4', 'json')
+else:
+    path = "charuco/transforms.json"
+
+with open(path, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=4)

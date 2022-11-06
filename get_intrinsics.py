@@ -1,4 +1,4 @@
-# python get_intrinsics.py --vid charuco.mp4
+# python get_intrinsics.py --vid vid.mp4
 
 import argparse
 import cv2
@@ -12,15 +12,12 @@ from utils import calibrate, undistort
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vid", type=str, default="./")
-parser.add_argument("--out", type=str, default="./")
 parser.add_argument("--skip", type=int, default=6)
 parser.add_argument("--drop", type=int, default=30)
 parser.add_argument("--squares", type=int, nargs="+", default=[5,7])
 args = parser.parse_args()
 
 print(args)
-
-os.makedirs(args.out, exist_ok=True)
 
 vid = imageio.mimread(args.vid, memtest=False)
 print('vid: ', len(vid), vid[0].shape)
@@ -36,7 +33,7 @@ charuco = aruco.CharucoBoard_create(
 print('camera_raw')
 cameraMatrix, distCoeffs = calibrate(
     vid[args.drop:-args.drop:args.skip], aruco_dict, charuco)
-with open(os.path.join(args.out, 'camera_raw.pkl'), 'wb') as f:
+with open('camera_raw.pkl', 'wb') as f:
     pickle.dump((cameraMatrix, distCoeffs), f)
 
 vid_undist = undistort(
@@ -44,7 +41,7 @@ vid_undist = undistort(
 
 print('camera_undist')
 cameraMatrix, distCoeffs = calibrate(vid_undist, aruco_dict, charuco)
-with open(os.path.join(args.out, 'camera_undist.pkl'), 'wb') as f:
+with open('camera_undist.pkl', 'wb') as f:
     pickle.dump((cameraMatrix, distCoeffs), f)
 
 # for debug
