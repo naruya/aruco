@@ -7,7 +7,6 @@ import numpy as np
 import os
 import pickle
 import imageio
-import matplotlib.pyplot as plt
 from utils import calibrate, undistort
 
 
@@ -24,7 +23,6 @@ print(args)
 os.makedirs(args.out, exist_ok=True)
 
 vid = imageio.mimread(args.vid, memtest=False)
-
 print('vid: ', len(vid), vid[0].shape)
 
 aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_1000)

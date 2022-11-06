@@ -66,7 +66,81 @@ def undistort(vid, mtx, dist):
     return [_undistort(img) for img in tqdm(vid)]
 
 
-import cv2
+def estimate_pose(vid, aruco_dict, charuco, mtx, dist, sl, mode='A4'):
+    indices, vid_paint, rvec_hist, tvec_hist = [], [], [], []
+
+    for t, img in enumerate(vid):
+        img = deepcopy(img[...,::-1])
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        aruco_params = aruco.DetectorParameters_create()
+        corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+
+        corners, ids, rejectedImgPoints, recoveredIds = aruco.refineDetectedMarkers(
+                image = gray,
+                board = charuco,
+                detectedCorners = corners,
+                detectedIds = ids,
+                rejectedCorners = rejectedImgPoints,
+                cameraMatrix = mtx,
+                distCoeffs = dist)
+
+        img = aruco.drawDetectedMarkers(img, corners, borderColor=(0, 0, 255), ids=ids)
+
+        if not (ids is not None and len(ids) > 1):
+            print("skip (t={}, ids={})".format(t, ids))
+            continue
+
+        response, charuco_corners, charuco_ids = aruco.interpolateCornersCharuco(
+                markerCorners=corners,
+                markerIds=ids,
+                image=gray,
+                board=charuco)
+
+        if response < 8:
+            print("skip (t={}, response={})".format(t, response))
+            continue
+
+        # valid, rvec, tvec = aruco.estimatePoseCharucoBoard(
+        #         charucoCorners=charuco_corners,
+        #         charucoIds=charuco_ids,
+        #         board=charuco,
+        #         cameraMatrix=mtx,
+        #         distCoeffs=dist,
+        #         rvec=None,
+        #         tvec=None)
+
+        objp = np.empty((0,3), np.float32)
+        for idx in charuco_ids:
+            if mode=='A4':
+                # objpi = charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl
+                # objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl, np.array([[0,1,0], [-1,0,0], [0,0,-1]]))
+                # objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl, np.array([[1,0,0], [0,-1,0], [0,0,-1]]))
+                objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl, np.array([[0,-1,0], [-1,0,0], [0,0,-1]]))
+            elif mode=='A3':
+                objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[5,7,0]]) * sl, np.array([[-1,0,0], [0,1,0], [0,0,-1]]))
+            objp = np.append(objp, objpi, axis=0)
+
+        valid, rvec, tvec = cv2.solvePnP(objp, charuco_corners, mtx, dist)
+
+        if not valid:
+            print("skip (t={}, valid={})".format(t, valid))
+            continue
+
+        img = cv2.drawFrameAxes(img, mtx, dist, rvec, tvec, 0.3)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+        indices.append(t)
+        vid_paint.append(img)
+        rvec_hist.append(rvec)
+        tvec_hist.append(tvec)
+
+    print("Number of detected frames:", len(indices))
+
+    # for debug
+    imageio.mimwrite("temp_pose{:04}.mp4".format(np.random.randint(1000)), vid_paint, macro_block_size=8)
+
+    return indices, rvec_hist, tvec_hist
 
 
 class Warper():
