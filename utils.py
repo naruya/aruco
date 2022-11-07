@@ -29,7 +29,7 @@ def calibrate(vid, aruco_dict, charuco):
                 image=gray,
                 board=charuco)
 
-        if response < 8:
+        if response < 4:
             print("skip (t={}, response={})".format(t, response))
             continue
 
@@ -97,7 +97,7 @@ def estimate_pose(vid, aruco_dict, charuco, mtx, dist, sl, mode='A4'):
                 image=gray,
                 board=charuco)
 
-        if response < 8:
+        if response < 6:
             print("skip (t={}, response={})".format(t, response))
             continue
 
@@ -247,5 +247,5 @@ class BackRemover():
 
 def project_w2c(pts, rvec, tvec, mtx, dist):
     pts, _ = cv2.projectPoints(pts, rvec, tvec, mtx, dist)
-    pts = pts.squeeze().astype(np.int16)  # np.int16!!!
+    pts = pts.squeeze()
     return pts

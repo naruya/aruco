@@ -54,9 +54,12 @@ vid_sample = list(np.array(vid)[indices])
 print(len(vid_sample), len(rvec_hist), len(tvec_hist))
 
 if 'main' in os.path.basename(args.vid):
-    path = os.path.basename(args.vid).replace('main', 'main_real')
+    os.makedirs('temp/', exist_ok=True)
+
+    path = 'temp/' + os.path.basename(args.vid).replace('main', 'main_real')
     imageio.mimwrite(path, vid_sample, macro_block_size=8)
-    path = os.path.basename(args.vid).replace('main', 'poses').replace('mp4', 'pkl')
+
+    path = 'temp/' + os.path.basename(args.vid).replace('main', 'poses').replace('mp4', 'pkl')
     with open(path, 'wb') as f:
         pickle.dump((indices, rvec_hist, tvec_hist), f)
 
@@ -108,7 +111,7 @@ for t, (img, c2w) in enumerate(zip(vid_sample, poses)):
 out["frames"] = frames
 
 if 'main' in os.path.basename(args.vid):
-    path = os.path.basename(args.vid).replace('main', 'transforms').replace('mp4', 'json')
+    path = 'temp/' + os.path.basename(args.vid).replace('main', 'transforms').replace('mp4', 'json')
 else:
     path = "charuco/transforms.json"
 
