@@ -1,8 +1,4 @@
-src/temp.mp4
-
-poses.pkl
-transforms.json
-images/
+temp*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
