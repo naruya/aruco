@@ -2,7 +2,6 @@ import cv2
 import cv2.aruco as aruco
 import numpy as np
 from copy import deepcopy
-from tqdm import tqdm
 import imageio
 
 
@@ -29,7 +28,7 @@ def calibrate(vid, aruco_dict, charuco):
                 image=gray,
                 board=charuco)
 
-        if response < 4:
+        if response < 6:  # (expected: 'count >= 6')
             print("skip (t={}, response={})".format(t, response))
             continue
 
@@ -63,7 +62,7 @@ def calibrate(vid, aruco_dict, charuco):
 def undistort(vid, mtx, dist):
     newmtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, vid[0].shape[1::-1], 0)
     _undistort = lambda img: cv2.undistort(deepcopy(img), mtx, dist, None, newmtx)
-    return [_undistort(img) for img in tqdm(vid)]
+    return [_undistort(img) for img in vid]
 
 
 def estimate_pose(vid, aruco_dict, charuco, mtx, dist, sl, mode='A4'):
@@ -113,12 +112,11 @@ def estimate_pose(vid, aruco_dict, charuco, mtx, dist, sl, mode='A4'):
         objp = np.empty((0,3), np.float32)
         for idx in charuco_ids:
             if mode=='A4':
-                # objpi = charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl
-                # objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl, np.array([[0,1,0], [-1,0,0], [0,0,-1]]))
-                # objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl, np.array([[1,0,0], [0,-1,0], [0,0,-1]]))
-                objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl, np.array([[0,-1,0], [-1,0,0], [0,0,-1]]))
+                objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[-2,3.5,0]]) * sl,
+                               np.array([[0,-1,0], [-1,0,0], [0,0,-1]]))
             elif mode=='A3':
-                objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[5,7,0]]) * sl, np.array([[-1,0,0], [0,1,0], [0,0,-1]]))
+                objpi = np.dot(charuco.chessboardCorners[idx] - np.array([[5,7,0]]) * sl,
+                               np.array([[-1,0,0], [0,1,0], [0,0,-1]]))
             objp = np.append(objp, objpi, axis=0)
 
         ret, rvec, tvec = cv2.solvePnP(objp, charuco_corners, mtx, dist)
@@ -223,34 +221,19 @@ class FeatureExtractor():
 
 class BackRemover():
     def __init__(self):
-        self.warper = Warper()
         self.extractor = FeatureExtractor()
 
     def __call__(self, real, pred, pts_board, pts_center, mask_aux=None, upperlim=0.12, thresh=0.8):
-        real_orig = deepcopy(real)
-        pred_orig = deepcopy(pred)
-
-        size = np.array(real.shape[-2:-4:-1])
-        real = cv2.resize(real, size)
-        pred = cv2.resize(pred, size)
-        ret, out = self.warper(pred, real)
-
-        if ret:
-            pred = out
-        else:
-            msg = out
-            return False, msg
+        orig = deepcopy(real)
 
         size = np.array(real.shape[-2:-4:-1]) // 4
         real = cv2.resize(real, size)
         pred = cv2.resize(pred, size)
-        
-        real = real.astype(np.float32) / 255.
-        pred = pred.astype(np.float32) / 255.
-
         real = cv2.blur(real, (3,3))
         pred = cv2.blur(pred, (3,3))
 
+        real = real.astype(np.float32) / 255.
+        pred = pred.astype(np.float32) / 255.
         real = self.extractor(real)
         pred = self.extractor(pred)
 
@@ -262,7 +245,7 @@ class BackRemover():
         diff = np.clip(diff, 0, upperlim) / upperlim
         alpha = np.where(diff < thresh, 0, diff)
         alpha = (alpha.astype(np.float32) * 255).astype(np.uint8)
-        alpha = cv2.resize(alpha, real_orig.shape[-2:-4:-1])
+        alpha = cv2.resize(alpha, orig.shape[-2:-4:-1])
 
         # paint charuco board with black
         # alpha = cv2.drawContours(alpha, [pts_board], -1, 0, -1)
@@ -280,19 +263,20 @@ class BackRemover():
         mask = cv2.threshold(alpha, 0, 255, cv2.THRESH_BINARY)[1]
         contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         mask = np.zeros(mask.shape[:2], dtype=np.uint8)
+
+        ret = 0
         for k, cnt in enumerate(contours):
             ret = cv2.pointPolygonTest(cnt, pts_center, False)
             if ret==1:
                 mask = cv2.drawContours(mask, [cnt], 0, 255, -1)
+        if ret == 0:
+            return False, "no target error!"
+
         if mask_aux is not None:
             mask = mask * (mask_aux.astype(np.float32) / 255.)
 
-        msg = check_protrude(mask)
-        if msg is not None:
-            return False, msg
-
         alpha = (alpha.astype(np.float32) / 255.) * (mask.astype(np.float32) / 255.)
-        segm = (real_orig.astype(np.float32) / 255.) * alpha.astype(np.float32)[...,None]
+        segm = (orig.astype(np.float32) / 255.) * alpha.astype(np.float32)[...,None]
         segm = (segm * 255.).astype(np.uint8)
         alpha = (alpha * 255.).astype(np.uint8)
 
@@ -302,46 +286,30 @@ class BackRemover():
 
         return True, segm, mask_aux, diff, alpha
 
-    
-def check_protrude(mask):
-    ret1 = np.any(mask[[0,-1]] == 255) or np.any(mask[:, [0,-1]] == 255)
-    ret2 = np.all(mask == 0)
-    if ret1 or ret2:
-        return "check_protrude error!"
-    else:
-        return None
+
+class Cropper():
+    def __init__(self):
+        pass
+
+    def __call__(self, img, cpos_target, size, scale):
+        cx, cy = cpos_target
+        h, w = img.shape[:2]
+
+        _size = int(size / scale)
+        x0 = int(cx - _size / 2)
+        y0 = int(cy - _size / 2)
+        x1 = x0 + _size
+        y1 = y0 + _size
+
+        if x0 < 0 or y0 < 0 or x1 >= w or y1 >=h:
+            return False, "crop error!"
+
+        img = img[y0:y0+_size, x0:x0+_size]
+        img = cv2.resize(img, (size, size))
+        return True, img, (x0, y0, x1, y1)
 
 
 def project_w2c(pts, rvec, tvec, mtx, dist):
     pts, _ = cv2.projectPoints(pts, rvec, tvec, mtx, dist)
     pts = pts.squeeze()
     return pts
-
-
-def crop(img, cpos_target, size, scale):
-    out = deepcopy(img)
-
-    h, w = out.shape[:2]
-    out = cv2.resize(out, (int(w * scale), int(h * scale)))
-
-    cx, cy = (cpos_target * scale).squeeze().astype(np.int64).tolist()
-    h, w = out.shape[:2]
-
-    # padding for centering
-    padx = w - cx * 2
-    padx = (padx, 0) if padx > 0 else (0, -padx)
-    pady = h - cy * 2
-    pady = (pady, 0) if pady > 0 else (0, -pady)
-
-    if len(img.shape) == 3:
-        out = np.pad(out, [pady, padx, (0, 0)])
-        out = np.pad(out, [(size, size), (size, size), (0, 0)])
-    else:
-        out = np.pad(out, [pady, padx])
-        out = np.pad(out, [(size, size), (size, size)])
-
-    _h, _w = out.shape[:2]
-    x0 = int(_w / 2 - size / 2)
-    y0 = int(_h / 2 - size / 2)
-    out = out[y0:y0+size, x0:x0+size]
-    return out
