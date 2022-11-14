@@ -65,7 +65,7 @@ def undistort(vid, mtx, dist):
     return [_undistort(img) for img in vid]
 
 
-def estimate_pose(vid, aruco_dict, charuco, mtx, dist, sl, mode='A4'):
+def estimate_poses(vid, aruco_dict, charuco, mtx, dist, sl, mode='A4'):
     indices, vid_paint, rvec_hist, tvec_hist = [], [], [], []
 
     for t, img in enumerate(vid):
@@ -220,10 +220,12 @@ class FeatureExtractor():
 
 
 class BackRemover():
-    def __init__(self):
+    def __init__(self, thresh=0.1, upperlim=0.2):
         self.extractor = FeatureExtractor()
+        self.thresh = thresh
+        self.upperlim = upperlim
 
-    def __call__(self, real, pred, pts_board, pts_center, mask_aux=None, upperlim=0.12, thresh=0.8):
+    def __call__(self, real, pred, pts_board, pts_center, mask_aux=None):
         orig = deepcopy(real)
 
         size = np.array(real.shape[-2:-4:-1]) // 4
@@ -240,36 +242,32 @@ class BackRemover():
         diff = np.mean(np.abs(real - pred), axis=2)
 
         # for tuning
-        # print(diff.max(), np.percentile(diff, [98]))
+        # plt.figure(figsize=(4,2)); plt.hist(diff.flatten(), bins=100); plt.show()
 
-        diff = np.clip(diff, 0, upperlim) / upperlim
-        alpha = np.where(diff < thresh, 0, diff)
-        alpha = (alpha.astype(np.float32) * 255).astype(np.uint8)
-        alpha = cv2.resize(alpha, orig.shape[-2:-4:-1])
+        diff = np.where(diff < self.thresh, 0, diff)
+        diff = np.clip(diff, 0, self.upperlim) / self.upperlim
+        diff = (diff.astype(np.float32) * 255).astype(np.uint8)
+        diff = cv2.resize(diff, orig.shape[-2:-4:-1])
 
         # paint charuco board with black
         # alpha = cv2.drawContours(alpha, [pts_board], -1, 0, -1)
 
-        # for debug
-        diff = (diff * 255.).astype(np.uint8)
-
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(15,15))
 
-        # Open first!
+        alpha = cv2.morphologyEx(diff, cv2.MORPH_CLOSE, kernel, iterations=10)
         alpha = cv2.morphologyEx(alpha, cv2.MORPH_OPEN, kernel, iterations=10)
-        alpha = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, kernel, iterations=10)
         alpha = cv2.erode(alpha, kernel, iterations=5)
 
         mask = cv2.threshold(alpha, 0, 255, cv2.THRESH_BINARY)[1]
         contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         mask = np.zeros(mask.shape[:2], dtype=np.uint8)
 
-        ret = 0
+        ret = -1.
         for k, cnt in enumerate(contours):
             ret = cv2.pointPolygonTest(cnt, pts_center, False)
             if ret==1:
                 mask = cv2.drawContours(mask, [cnt], 0, 255, -1)
-        if ret == 0:
+        if ret == -1.:
             return False, "no target error!"
 
         if mask_aux is not None:

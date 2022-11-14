@@ -12,12 +12,6 @@ echo timestamp: $3  # $TS
 for i in `seq -f '%03g' 0 $2`
 do
   python get_nerf_dataset.py --vid /root/workspace/data/record3d/tonpy-$1/raw/main_$i.mp4 --skip 3
-done
-
-
-for i in `seq -f '%03g' 0 $2`
-do
   ./nerfstudio_render.sh $1 $i $3
 done
-
 

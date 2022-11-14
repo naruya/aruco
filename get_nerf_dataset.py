@@ -10,13 +10,13 @@ import imageio
 import PIL
 import json
 import torch
-from utils import undistort, estimate_pose
+from utils import undistort, estimate_poses
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--vid", type=str, default="./")
 parser.add_argument("--skip", type=int, default=6)
-parser.add_argument("--drop", type=int, default=30)
+parser.add_argument("--drop", type=int, default=6)
 parser.add_argument("--squares", type=int, nargs="+", default=[5,7])
 parser.add_argument("--mode", type=str, default='A4')
 parser.add_argument("--sl", type=int, default=0.04)
@@ -47,7 +47,7 @@ charuco = aruco.CharucoBoard_create(
 
 
 # get pose
-indices, rvec_hist, tvec_hist = estimate_pose(
+indices, rvec_hist, tvec_hist = estimate_poses(
     vid, aruco_dict, charuco, mtx, dist, args.sl, args.mode)
 
 vid_sample = list(np.array(vid)[indices])
@@ -63,6 +63,8 @@ if 'main' in os.path.basename(args.vid):
     with open(path, 'wb') as f:
         pickle.dump((indices, rvec_hist, tvec_hist), f)
 
+
+# get nerf dataset in nerfstudio format
 H, W = vid[0].shape[:2]
 
 if 'back' in os.path.basename(args.vid):

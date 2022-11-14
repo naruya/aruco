@@ -13,7 +13,7 @@ from utils import calibrate, undistort
 parser = argparse.ArgumentParser()
 parser.add_argument("--vid", type=str, default="./")
 parser.add_argument("--skip", type=int, default=6)
-parser.add_argument("--drop", type=int, default=30)
+parser.add_argument("--drop", type=int, default=6)
 parser.add_argument("--squares", type=int, nargs="+", default=[5,7])
 args = parser.parse_args()
 
