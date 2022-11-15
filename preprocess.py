@@ -216,7 +216,7 @@ class Preprocessor():
         self.save_dir = save_dir
         os.makedirs(os.path.join(save_dir, 'video'), exist_ok=True)
         os.makedirs(os.path.join(save_dir, 'video_large'), exist_ok=True)
-        os.makedirs(os.path.join(save_dir, 'views'), exist_ok=True)
+        os.makedirs(os.path.join(save_dir, 'view'), exist_ok=True)
 
     def __call__(self, indices, main_real, main_pred, rvec_hist, tvec_hist):
         bad_indices = []
@@ -263,13 +263,13 @@ class Preprocessor():
 
                 if len(self.frames) == self.T:
                     assert len(self.frames) == len(self.views)
-                    frames_4 = [cv2.resize(frame, (self.size//4,self.size//4)) for frame in self.frames]
+                    frames_4 = [cv2.resize(frame, (self.size//8,self.size//8)) for frame in self.frames]
 
                     path = os.path.join(self.save_dir, "video", "{:04}.gif".format(self.N))
                     imageio.mimwrite(path, self.frames)
                     path = os.path.join(self.save_dir, "video_large", "{:04}.gif".format(self.N))
                     imageio.mimwrite(path, frames_4)
-                    path = os.path.join(self.save_dir, "views", "{:04}.npy".format(self.N))
+                    path = os.path.join(self.save_dir, "view", "{:04}.npy".format(self.N))
                     np.save(path, np.array(self.views))
                     
                     self.frames = []
